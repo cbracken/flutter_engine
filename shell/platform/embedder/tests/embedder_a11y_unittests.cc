@@ -7,6 +7,7 @@
 #define FML_USED_ON_EMBEDDER
 
 #include <functional>
+#include <type_traits>
 
 #include "flutter/fml/macros.h"
 #include "flutter/fml/message_loop.h"
@@ -93,6 +94,51 @@ TEST_F(EmbedderTest, CannotProvideMultipleSemanticsCallbacks) {
   }
 }
 
+template <typename... Ts>
+class NativeFunction {
+ public:
+  NativeFunction() = default;
+  ~NativeFunction() = default;
+
+  void SetHandler(std::function<void(Ts...)> function) {
+    function_ = std::move(function);
+  }
+
+  void Wait() { platform_thread_latch.Wait(); }
+
+  void Invoke(Dart_NativeArguments args) {
+    InvokeWithConvertedArgs(args, std::make_index_sequence<sizeof...(Ts)>{});
+    platform_thread_latch.Signal();
+  }
+
+  operator std::function<void(Dart_NativeArguments)>() {
+    return std::bind(&NativeFunction<Ts...>::Invoke, this,
+                     std::placeholders::_1);
+  }
+
+ private:
+  // Evaluates to the Ith type of Ts.
+  template <int I>
+  using NthTypeOf = typename std::tuple_element<I, std::tuple<Ts...>>::type;
+
+  // Converts the Ith argument in args to a value of type T.
+  template <int I, typename T>
+  static T Convert(Dart_NativeArguments args) {
+    Dart_Handle exception = nullptr;
+    return ::tonic::DartConverter<T>::FromArguments(args, I, exception);
+  }
+
+  // Invokes function_, passing each of the args through Convert.
+  template <size_t... Is>
+  void InvokeWithConvertedArgs(Dart_NativeArguments args,
+                               std::index_sequence<Is...>) {
+    function_(Convert<Is, NthTypeOf<Is>>(args)...);
+  }
+
+  fml::AutoResetWaitableEvent platform_thread_latch;
+  std::function<void(Ts...)> function_;
+};
+
 TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
 #if defined(OS_FUCHSIA)
   GTEST_SKIP() << "This test crashes on Fuchsia. https://fxbug.dev/87493 ";
@@ -104,6 +150,7 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
 
   // Called by the Dart text fixture on the UI thread to signal that the C++
   // unittest should resume.
+  NativeFunction<> notify_native_test;
   context.AddNativeCallback(
       "SignalNativeTest",
       CREATE_NATIVE_ENTRY(([&signal_native_latch](Dart_NativeArguments) {
@@ -111,32 +158,18 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
       })));
 
   // Called by test fixture on UI thread to pass data back to this test.
-  NativeEntry notify_semantics_enabled_callback;
-  context.AddNativeCallback(
-      "NotifySemanticsEnabled",
-      CREATE_NATIVE_ENTRY(
-          ([&notify_semantics_enabled_callback](Dart_NativeArguments args) {
-            ASSERT_NE(notify_semantics_enabled_callback, nullptr);
-            notify_semantics_enabled_callback(args);
-          })));
+  NativeFunction<bool> notify_semantics_enabled;
+  context.AddNativeCallback("NotifySemanticsEnabled",
+                            CREATE_NATIVE_ENTRY(notify_semantics_enabled));
 
-  NativeEntry notify_accessibility_features_callback;
-  context.AddNativeCallback(
-      "NotifyAccessibilityFeatures",
-      CREATE_NATIVE_ENTRY((
-          [&notify_accessibility_features_callback](Dart_NativeArguments args) {
-            ASSERT_NE(notify_accessibility_features_callback, nullptr);
-            notify_accessibility_features_callback(args);
-          })));
+  NativeFunction<bool> notify_accessibility_features;
+  context.AddNativeCallback("NotifyAccessibilityFeatures",
+                            CREATE_NATIVE_ENTRY(notify_accessibility_features));
 
-  NativeEntry notify_semantics_action_callback;
-  context.AddNativeCallback(
-      "NotifySemanticsAction",
-      CREATE_NATIVE_ENTRY(
-          ([&notify_semantics_action_callback](Dart_NativeArguments args) {
-            ASSERT_NE(notify_semantics_action_callback, nullptr);
-            notify_semantics_action_callback(args);
-          })));
+  NativeFunction<int64_t, int64_t, std::vector<int64_t>>
+      notify_semantics_action;
+  context.AddNativeCallback("NotifySemanticsAction",
+                            CREATE_NATIVE_ENTRY(notify_semantics_action));
 
   fml::AutoResetWaitableEvent semantics_update_latch;
   context.SetSemanticsUpdateCallback2(
@@ -174,59 +207,33 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   builder.SetSoftwareRendererConfig();
   builder.SetDartEntrypoint("a11y_main");
 
+  notify_semantics_enabled.SetHandler(
+      [](bool enabled) { ASSERT_FALSE(enabled); });
+
   auto engine = builder.LaunchEngine();
   ASSERT_TRUE(engine.is_valid());
 
   // 1: Wait for initial notifySemanticsEnabled(false).
-  fml::AutoResetWaitableEvent notify_semantics_enabled_latch;
-  notify_semantics_enabled_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    bool enabled =
-        ::tonic::DartConverter<bool>::FromArguments(args, 0, exception);
-    ASSERT_FALSE(enabled);
-    notify_semantics_enabled_latch.Signal();
-  };
-  notify_semantics_enabled_latch.Wait();
-
-  // Prepare notifyAccessibilityFeatures callback.
-  fml::AutoResetWaitableEvent notify_features_latch;
-  notify_accessibility_features_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    bool enabled =
-        ::tonic::DartConverter<bool>::FromArguments(args, 0, exception);
-    ASSERT_FALSE(enabled);
-    notify_features_latch.Signal();
-  };
+  notify_semantics_enabled.Wait();
 
   // 2: Enable semantics. Wait for notifySemanticsEnabled(true).
-  fml::AutoResetWaitableEvent notify_semantics_enabled_latch_2;
-  notify_semantics_enabled_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    bool enabled =
-        ::tonic::DartConverter<bool>::FromArguments(args, 0, exception);
-    ASSERT_TRUE(enabled);
-    notify_semantics_enabled_latch_2.Signal();
-  };
+  notify_semantics_enabled.SetHandler(
+      [](bool enabled) { ASSERT_TRUE(enabled); });
+  notify_accessibility_features.SetHandler(
+      [](bool reduce_motion) { ASSERT_FALSE(reduce_motion); });
   auto result = FlutterEngineUpdateSemanticsEnabled(engine.get(), true);
-  ASSERT_EQ(result, FlutterEngineResult::kSuccess);
-  notify_semantics_enabled_latch_2.Wait();
+  notify_semantics_enabled.Wait();
 
   // 3: Wait for notifyAccessibilityFeatures (reduce_motion == false)
-  notify_features_latch.Wait();
+  notify_accessibility_features.Wait();
 
   // 4: Wait for notifyAccessibilityFeatures (reduce_motion == true)
-  fml::AutoResetWaitableEvent notify_features_latch_2;
-  notify_accessibility_features_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    bool enabled =
-        ::tonic::DartConverter<bool>::FromArguments(args, 0, exception);
-    ASSERT_TRUE(enabled);
-    notify_features_latch_2.Signal();
-  };
+  notify_accessibility_features.SetHandler(
+      [](bool reduce_motion) { ASSERT_TRUE(reduce_motion); });
   result = FlutterEngineUpdateAccessibilityFeatures(
       engine.get(), kFlutterAccessibilityFeatureReduceMotion);
   ASSERT_EQ(result, FlutterEngineResult::kSuccess);
-  notify_features_latch_2.Wait();
+  notify_accessibility_features.Wait();
 
   // 5: Wait for UpdateSemantics callback on platform (current) thread.
   signal_native_latch.Wait();
@@ -234,41 +241,24 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   semantics_update_latch.Wait();
 
   // 6: Dispatch a tap to semantics node 42. Wait for NotifySemanticsAction.
-  fml::AutoResetWaitableEvent notify_semantics_action_latch;
-  notify_semantics_action_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    int64_t node_id =
-        ::tonic::DartConverter<int64_t>::FromArguments(args, 0, exception);
+  notify_semantics_action.SetHandler([](int64_t node_id, int64_t action_id,
+                                        std::vector<int64_t> arguments) {
     ASSERT_EQ(42, node_id);
-
-    int64_t action_id =
-        ::tonic::DartConverter<int64_t>::FromArguments(args, 1, exception);
     ASSERT_EQ(static_cast<int32_t>(flutter::SemanticsAction::kTap), action_id);
-
-    std::vector<int64_t> semantic_args =
-        ::tonic::DartConverter<std::vector<int64_t>>::FromArguments(args, 2,
-                                                                    exception);
-    ASSERT_THAT(semantic_args, ElementsAre(2, 1));
-    notify_semantics_action_latch.Signal();
-  };
+    ASSERT_THAT(arguments, ElementsAre(2, 1));
+  });
   std::vector<uint8_t> bytes({2, 1});
   result = FlutterEngineDispatchSemanticsAction(
-      engine.get(), 42, kFlutterSemanticsActionTap, &bytes[0], bytes.size());
+      engine.get(), 42, kFlutterSemanticsActionTap, bytes.data(), bytes.size());
   ASSERT_EQ(result, FlutterEngineResult::kSuccess);
-  notify_semantics_action_latch.Wait();
+  notify_semantics_action.Wait();
 
   // 7: Disable semantics. Wait for NotifySemanticsEnabled(false).
-  fml::AutoResetWaitableEvent notify_semantics_enabled_latch_3;
-  notify_semantics_enabled_callback = [&](Dart_NativeArguments args) {
-    Dart_Handle exception = nullptr;
-    bool enabled =
-        ::tonic::DartConverter<bool>::FromArguments(args, 0, exception);
-    ASSERT_FALSE(enabled);
-    notify_semantics_enabled_latch_3.Signal();
-  };
+  notify_semantics_enabled.SetHandler(
+      [](bool enabled) { ASSERT_FALSE(enabled); });
   result = FlutterEngineUpdateSemanticsEnabled(engine.get(), false);
   ASSERT_EQ(result, FlutterEngineResult::kSuccess);
-  notify_semantics_enabled_latch_3.Wait();
+  notify_semantics_enabled.Wait();
 }
 
 TEST_F(EmbedderA11yTest, A11yTreeIsConsistentUsingUnstableCallbacks) {
