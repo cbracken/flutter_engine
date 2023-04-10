@@ -146,16 +146,13 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
 
   auto& context = GetEmbedderContext(EmbedderTestContextType::kSoftwareContext);
 
-  fml::AutoResetWaitableEvent signal_native_latch;
-
   // Called by the Dart text fixture on the UI thread to signal that the C++
   // unittest should resume.
+  // TODO(cbracken): This is unused in this test.
   NativeFunction<> notify_native_test;
-  context.AddNativeCallback(
-      "SignalNativeTest",
-      CREATE_NATIVE_ENTRY(([&signal_native_latch](Dart_NativeArguments) {
-        signal_native_latch.Signal();
-      })));
+  context.AddNativeCallback("SignalNativeTest",
+                            CREATE_NATIVE_ENTRY(notify_native_test));
+  notify_native_test.SetHandler([] {});
 
   // Called by test fixture on UI thread to pass data back to this test.
   NativeFunction<bool> notify_semantics_enabled;
@@ -207,24 +204,21 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   builder.SetSoftwareRendererConfig();
   builder.SetDartEntrypoint("a11y_main");
 
+  // 1: Wait for initial notifySemanticsEnabled(false).
   notify_semantics_enabled.SetHandler(
       [](bool enabled) { ASSERT_FALSE(enabled); });
-
   auto engine = builder.LaunchEngine();
   ASSERT_TRUE(engine.is_valid());
-
-  // 1: Wait for initial notifySemanticsEnabled(false).
   notify_semantics_enabled.Wait();
 
   // 2: Enable semantics. Wait for notifySemanticsEnabled(true).
+  // 3: Wait for notifyAccessibilityFeatures (reduce_motion == false)
   notify_semantics_enabled.SetHandler(
       [](bool enabled) { ASSERT_TRUE(enabled); });
   notify_accessibility_features.SetHandler(
       [](bool reduce_motion) { ASSERT_FALSE(reduce_motion); });
   auto result = FlutterEngineUpdateSemanticsEnabled(engine.get(), true);
   notify_semantics_enabled.Wait();
-
-  // 3: Wait for notifyAccessibilityFeatures (reduce_motion == false)
   notify_accessibility_features.Wait();
 
   // 4: Wait for notifyAccessibilityFeatures (reduce_motion == true)
@@ -236,7 +230,7 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   notify_accessibility_features.Wait();
 
   // 5: Wait for UpdateSemantics callback on platform (current) thread.
-  signal_native_latch.Wait();
+  notify_native_test.Wait();
   fml::MessageLoop::GetCurrent().RunExpiredTasksNow();
   semantics_update_latch.Wait();
 
