@@ -94,6 +94,21 @@ TEST_F(EmbedderTest, CannotProvideMultipleSemanticsCallbacks) {
   }
 }
 
+// Templatized native implementation for a Dart function registered via FFI.
+//
+// Example usage, Dart side:
+//
+// @pragma('vm:external-name', 'DoSomething')
+// void doSomething(String s, int i);
+//
+// Example usage, C++ side:
+//
+// NativeFunction<std::string, int64_t> do_stomething;
+// context.AddNativeCallback("DoSomething",
+//                           CREATE_NATIVE_ENTRY(do_something));
+// do_something.SetImplementation([](std::string s, int64_t i) {
+//   ...
+// });
 template <typename... Ts>
 class NativeFunction {
  public:
