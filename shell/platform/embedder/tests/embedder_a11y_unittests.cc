@@ -100,7 +100,7 @@ class NativeFunction {
   NativeFunction() = default;
   ~NativeFunction() = default;
 
-  void SetHandler(std::function<void(Ts...)> function) {
+  void SetImplementation(std::function<void(Ts...)> function) {
     function_ = std::move(function);
   }
 
@@ -152,7 +152,7 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   NativeFunction<> notify_native_test;
   context.AddNativeCallback("SignalNativeTest",
                             CREATE_NATIVE_ENTRY(notify_native_test));
-  notify_native_test.SetHandler([] {});
+  notify_native_test.SetImplementation([] {});
 
   // Called by test fixture on UI thread to pass data back to this test.
   NativeFunction<bool> notify_semantics_enabled;
@@ -205,7 +205,7 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   builder.SetDartEntrypoint("a11y_main");
 
   // 1: Wait for initial notifySemanticsEnabled(false).
-  notify_semantics_enabled.SetHandler(
+  notify_semantics_enabled.SetImplementation(
       [](bool enabled) { ASSERT_FALSE(enabled); });
   auto engine = builder.LaunchEngine();
   ASSERT_TRUE(engine.is_valid());
@@ -213,16 +213,16 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
 
   // 2: Enable semantics. Wait for notifySemanticsEnabled(true).
   // 3: Wait for notifyAccessibilityFeatures (reduce_motion == false)
-  notify_semantics_enabled.SetHandler(
+  notify_semantics_enabled.SetImplementation(
       [](bool enabled) { ASSERT_TRUE(enabled); });
-  notify_accessibility_features.SetHandler(
+  notify_accessibility_features.SetImplementation(
       [](bool reduce_motion) { ASSERT_FALSE(reduce_motion); });
   auto result = FlutterEngineUpdateSemanticsEnabled(engine.get(), true);
   notify_semantics_enabled.Wait();
   notify_accessibility_features.Wait();
 
   // 4: Wait for notifyAccessibilityFeatures (reduce_motion == true)
-  notify_accessibility_features.SetHandler(
+  notify_accessibility_features.SetImplementation(
       [](bool reduce_motion) { ASSERT_TRUE(reduce_motion); });
   result = FlutterEngineUpdateAccessibilityFeatures(
       engine.get(), kFlutterAccessibilityFeatureReduceMotion);
@@ -235,12 +235,13 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   semantics_update_latch.Wait();
 
   // 6: Dispatch a tap to semantics node 42. Wait for NotifySemanticsAction.
-  notify_semantics_action.SetHandler([](int64_t node_id, int64_t action_id,
-                                        std::vector<int64_t> arguments) {
-    ASSERT_EQ(42, node_id);
-    ASSERT_EQ(static_cast<int32_t>(flutter::SemanticsAction::kTap), action_id);
-    ASSERT_THAT(arguments, ElementsAre(2, 1));
-  });
+  notify_semantics_action.SetImplementation(
+      [](int64_t node_id, int64_t action_id, std::vector<int64_t> arguments) {
+        ASSERT_EQ(42, node_id);
+        ASSERT_EQ(static_cast<int32_t>(flutter::SemanticsAction::kTap),
+                  action_id);
+        ASSERT_THAT(arguments, ElementsAre(2, 1));
+      });
   std::vector<uint8_t> bytes({2, 1});
   result = FlutterEngineDispatchSemanticsAction(
       engine.get(), 42, kFlutterSemanticsActionTap, bytes.data(), bytes.size());
@@ -248,7 +249,7 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
   notify_semantics_action.Wait();
 
   // 7: Disable semantics. Wait for NotifySemanticsEnabled(false).
-  notify_semantics_enabled.SetHandler(
+  notify_semantics_enabled.SetImplementation(
       [](bool enabled) { ASSERT_FALSE(enabled); });
   result = FlutterEngineUpdateSemanticsEnabled(engine.get(), false);
   ASSERT_EQ(result, FlutterEngineResult::kSuccess);
