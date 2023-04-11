@@ -119,11 +119,11 @@ class NativeFunction {
     function_ = std::move(function);
   }
 
-  void Wait() { platform_thread_latch.Wait(); }
+  void Wait() { platform_thread_latch_.Wait(); }
 
   void Invoke(Dart_NativeArguments args) {
     InvokeWithConvertedArgs(args, std::make_index_sequence<sizeof...(Ts)>{});
-    platform_thread_latch.Signal();
+    platform_thread_latch_.Signal();
   }
 
   operator std::function<void(Dart_NativeArguments)>() {
@@ -150,7 +150,7 @@ class NativeFunction {
     function_(Convert<Is, NthTypeOf<Is>>(args)...);
   }
 
-  fml::AutoResetWaitableEvent platform_thread_latch;
+  fml::AutoResetWaitableEvent platform_thread_latch_;
   std::function<void(Ts...)> function_;
 };
 
@@ -161,15 +161,11 @@ TEST_F(EmbedderA11yTest, A11yTreeIsConsistent) {
 
   auto& context = GetEmbedderContext(EmbedderTestContextType::kSoftwareContext);
 
-  // Called by the Dart text fixture on the UI thread to signal that the C++
-  // unittest should resume.
-  // TODO(cbracken): This is unused in this test.
   NativeFunction<> notify_native_test;
   context.AddNativeCallback("SignalNativeTest",
                             CREATE_NATIVE_ENTRY(notify_native_test));
   notify_native_test.SetImplementation([] {});
 
-  // Called by test fixture on UI thread to pass data back to this test.
   NativeFunction<bool> notify_semantics_enabled;
   context.AddNativeCallback("NotifySemanticsEnabled",
                             CREATE_NATIVE_ENTRY(notify_semantics_enabled));
