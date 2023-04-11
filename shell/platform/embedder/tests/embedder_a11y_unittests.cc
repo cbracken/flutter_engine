@@ -9,6 +9,7 @@
 #include <functional>
 #include <type_traits>
 
+#include "flutter/fml/logging.h"
 #include "flutter/fml/macros.h"
 #include "flutter/fml/message_loop.h"
 #include "flutter/fml/synchronization/waitable_event.h"
@@ -115,13 +116,14 @@ class NativeFunction {
   NativeFunction() = default;
   ~NativeFunction() = default;
 
-  void SetImplementation(std::function<void(Ts...)> function) {
-    function_ = std::move(function);
+  void SetImplementation(const std::function<void(Ts...)> function) {
+    function_ = function;
   }
 
   void Wait() { platform_thread_latch_.Wait(); }
 
   void Invoke(Dart_NativeArguments args) {
+    FML_DCHECK(function_) << "No implementation registered for NativeFunction";
     InvokeWithConvertedArgs(args, std::make_index_sequence<sizeof...(Ts)>{});
     platform_thread_latch_.Signal();
   }
