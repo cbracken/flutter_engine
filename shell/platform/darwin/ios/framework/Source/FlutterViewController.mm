@@ -240,7 +240,7 @@ typedef struct MouseState {
 
 - (void)awakeFromNib {
   [super awakeFromNib];
-  if (!self.engine) {
+  if (!_engine) {
     [self sharedSetupWithProject:nil initialRoute:nil];
   }
 }
@@ -771,15 +771,20 @@ static void SendFakeTouchEvent(UIScreen* screen,
 #pragma mark - UIViewController lifecycle notifications
 
 - (void)viewDidLoad {
+  NSLog(@"### FlutterViewController viewDidLoad");
   TRACE_EVENT0("flutter", "viewDidLoad");
 
   if (self.engine && self.engineNeedsLaunch) {
+    NSLog(@"### we have and engine and it needs launching: launching");
     [self.engine launchEngine:nil libraryURI:nil entrypointArgs:nil];
     [self.engine setViewController:self];
     self.engineNeedsLaunch = NO;
   } else if (self.engine.viewController == self) {
+    NSLog(@"### we have and engine and its viewController is us: attachView");
     [self.engine attachView];
   }
+
+  NSLog(@"### engine is launched, maybe?");
 
   // Register internal plugins.
   [self addInternalPlugins];

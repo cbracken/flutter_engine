@@ -429,6 +429,7 @@ static constexpr int kNumProfilerSamplesPerSec = 5;
 }
 
 - (void)attachView {
+  NSLog(@"### Calling attachView");
   self.iosPlatformView->attachView();
 }
 
@@ -683,6 +684,7 @@ static constexpr int kNumProfilerSamplesPerSec = 5;
 - (void)launchEngine:(NSString*)entrypoint
           libraryURI:(NSString*)libraryOrNil
       entrypointArgs:(NSArray<NSString*>*)entrypointArgs {
+  NSLog(@"## FlutterEngine launchEngine:libraryURI:entrypointArgs: -- calling RunEngine");
   // Launch the Dart application with the inferred run configuration.
   self.shell.RunEngine([self.dartProject runConfigurationForEntrypoint:entrypoint
                                                           libraryOrNil:libraryOrNil
