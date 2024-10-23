@@ -217,8 +217,10 @@ typedef struct MouseState {
                    initialRoute:(NSString*)initialRoute
                         nibName:(NSString*)nibName
                          bundle:(NSBundle*)nibBundle {
+  NSLog(@"###################### initWithProject:initialRout:nibName:bundle:");
   self = [super initWithNibName:nibName bundle:nibBundle];
   if (self) {
+    NSLog(@"###################### got self");
     // TODO(cbracken): https://github.com/flutter/flutter/issues/157140
     // Eliminate method calls in initializers and dealloc.
     [self sharedSetupWithProject:project initialRoute:initialRoute];
@@ -249,6 +251,7 @@ typedef struct MouseState {
 
 - (void)sharedSetupWithProject:(nullable FlutterDartProject*)project
                   initialRoute:(nullable NSString*)initialRoute {
+  NSLog(@"###################### sharedSetupWithProject:initialRoute");
   // Need the project to get settings for the view. Initializing it here means
   // the Engine class won't initialize it later.
   if (!project) {
@@ -260,9 +263,11 @@ typedef struct MouseState {
                                                       project:project
                                        allowHeadlessExecution:self.engineAllowHeadlessExecution
                                            restorationEnabled:self.restorationIdentifier != nil];
+  NSLog(@"###################### allocated engine");
   if (!engine) {
     return;
   }
+  NSLog(@"###################### allocated engine and it's not nil!");
 
   _viewOpaque = YES;
   _engine = engine;
@@ -270,6 +275,7 @@ typedef struct MouseState {
                                                 opaque:_viewOpaque
                                        enableWideGamut:project.isWideGamutEnabled];
   [_engine createShell:nil libraryURI:nil initialRoute:initialRoute];
+  NSLog(@"###################### created the shell w/ initialRoute");
   _engineNeedsLaunch = YES;
   _ongoingTouches = [[NSMutableSet alloc] init];
 
@@ -294,6 +300,7 @@ typedef struct MouseState {
 #pragma mark - Common view controller initialization tasks
 
 - (void)performCommonViewControllerInitialization {
+  NSLog(@"###################### performCommonViewControllerInitialization");
   if (_initialized) {
     return;
   }
@@ -312,6 +319,7 @@ typedef struct MouseState {
 }
 
 - (void)setUpNotificationCenterObservers {
+  NSLog(@"###################### setUpNotificationCenterObservers");
   NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
   [center addObserver:self
              selector:@selector(onOrientationPreferencesUpdated:)
@@ -434,6 +442,7 @@ typedef struct MouseState {
 }
 
 - (void)setUpApplicationLifecycleNotifications:(NSNotificationCenter*)center {
+  NSLog(@"###################### setUpApplicationLifecycleNotifications");
   [center addObserver:self
              selector:@selector(applicationBecameActive:)
                  name:UIApplicationDidBecomeActiveNotification

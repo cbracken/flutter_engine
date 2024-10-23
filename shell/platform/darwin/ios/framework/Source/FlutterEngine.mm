@@ -517,6 +517,7 @@ static constexpr int kNumProfilerSamplesPerSec = 5;
 // Channels get a reference to the engine, and therefore need manual
 // cleanup for proper collection.
 - (void)setUpChannels {
+  NSLog(@"########################## setUpChannels");
   // This will be invoked once the shell is done setting up and the isolate ID
   // for the UI isolate is available.
   __weak FlutterEngine* weakSelf = self;
@@ -539,9 +540,12 @@ static constexpr int kNumProfilerSamplesPerSec = 5;
                                            codec:[FlutterJSONMethodCodec sharedInstance]];
 
   if ([_initialRoute length] > 0) {
+    NSLog(@"########################## setUpChannels -- invokeMethod:setInitialRoute");
+
     // Flutter isn't ready to receive this method call yet but the channel buffer will cache this.
     [self.navigationChannel invokeMethod:@"setInitialRoute" arguments:_initialRoute];
     _initialRoute = nil;
+    NSLog(@"########################## setUpChannels -- invoked!!!");
   }
 
   self.restorationChannel =
@@ -764,11 +768,13 @@ static void SetEntryPoint(flutter::Settings* settings, NSString* entrypoint, NSS
 - (BOOL)createShell:(NSString*)entrypoint
          libraryURI:(NSString*)libraryURI
        initialRoute:(NSString*)initialRoute {
+  NSLog(@"###################### Engine: createShell:libraryURI:initialRoute");
   if (_shell != nullptr) {
     FML_LOG(WARNING) << "This FlutterEngine was already invoked.";
     return NO;
   }
 
+  // TODO(cbracken): delete this... it does nothing.
   self.initialRoute = initialRoute;
 
   auto settings = [self.dartProject settings];
