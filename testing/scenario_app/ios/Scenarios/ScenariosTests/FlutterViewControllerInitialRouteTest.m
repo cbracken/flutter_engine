@@ -47,7 +47,7 @@ FLUTTER_ASSERT_ARC
   FlutterBinaryMessengerConnection waitingForStatusConnection = [binaryMessenger
       setMessageHandlerOnChannel:@"waiting_for_status"
             binaryMessageHandler:^(NSData* message, FlutterBinaryReply reply) {
-              NSLog(@"################### waiting_on_status block. Invoking set_scenario");
+              NSLog(@"################### waiting_for_status block. Invoking set_scenario");
               FlutterMethodChannel* channel = [FlutterMethodChannel
                   methodChannelWithName:@"driver"
                         binaryMessenger:weakBinaryMessenger

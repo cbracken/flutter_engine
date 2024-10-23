@@ -1192,6 +1192,7 @@ static void SetEntryPoint(flutter::Settings* settings, NSString* entrypoint, NSS
 - (void)sendOnChannel:(NSString*)channel
               message:(NSData*)message
           binaryReply:(FlutterBinaryReply)callback {
+  NSLog(@"### FlutterEngine sendOnChannel:message:binaryReply for channel %@", channel);
   NSParameterAssert(channel);
   NSAssert(_shell && _shell->IsSetup(),
            @"Sending a message before the FlutterEngine has been run.");
@@ -1199,7 +1200,9 @@ static void SetEntryPoint(flutter::Settings* settings, NSString* entrypoint, NSS
       (callback == nil) ? nullptr
                         : fml::MakeRefCounted<flutter::PlatformMessageResponseDarwin>(
                               ^(NSData* reply) {
+                                NSLog(@"### Invoking the message callback");
                                 callback(reply);
+                                NSLog(@"### Invoked the message callback");
                               },
                               _shell->GetTaskRunners().GetPlatformTaskRunner());
   std::unique_ptr<flutter::PlatformMessage> platformMessage =

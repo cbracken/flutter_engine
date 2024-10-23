@@ -1044,9 +1044,13 @@ void Shell::OnPlatformViewSetViewportMetrics(int64_t view_id,
 // |PlatformView::Delegate|
 void Shell::OnPlatformViewDispatchPlatformMessage(
     std::unique_ptr<PlatformMessage> message) {
+  FML_LOG(ERROR) << "### PlatformView::OnPlatformViewDispatchPlatformMessage";
   FML_DCHECK(is_set_up_);
 #if FLUTTER_RUNTIME_MODE == FLUTTER_RUNTIME_MODE_DEBUG
+  FML_LOG(ERROR)
+      << "### PlatformView::OnPlatformViewDispatchPlatformMessage debugonly";
   if (!task_runners_.GetPlatformTaskRunner()->RunsTasksOnCurrentThread()) {
+    FML_LOG(ERROR) << "### ...  debugonly: !RunsTasksOnCurrentThread";
     std::scoped_lock lock(misbehaving_message_channels_mutex_);
     auto inserted = misbehaving_message_channels_.insert(message->channel());
     if (inserted.second) {
@@ -1064,19 +1068,24 @@ void Shell::OnPlatformViewDispatchPlatformMessage(
   }
 #endif  // FLUTTER_RUNTIME_MODE == FLUTTER_RUNTIME_MODE_DEBUG
 
+  FML_LOG(ERROR) << "### ... checking if UI thread is current";
   if (task_runners_.GetUITaskRunner()->RunsTasksOnCurrentThread()) {
+    FML_LOG(ERROR) << "### ... dispatching message on UI thread";
     engine_->DispatchPlatformMessage(std::move(message));
 
     // Post an empty task to make the UI message loop run its task observers.
     // The observers will execute any Dart microtasks queued by the platform
     // message handler.
+    FML_LOG(ERROR) << "### ... trigger ui thread task observers";
     task_runners_.GetUITaskRunner()->PostTask([] {});
   } else {
+    FML_LOG(ERROR) << "### ... posting a task to ui thread to dispatch message";
     // The static leak checker gets confused by the use of fml::MakeCopyable.
     // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
     task_runners_.GetUITaskRunner()->PostTask(
         fml::MakeCopyable([engine = engine_->GetWeakPtr(),
                            message = std::move(message)]() mutable {
+          FML_LOG(ERROR) << "### ... now I'm on UI thread, dispatching message";
           if (engine) {
             engine->DispatchPlatformMessage(std::move(message));
           }
